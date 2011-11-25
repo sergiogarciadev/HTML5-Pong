@@ -1,0 +1,281 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+    </head>
+    <body>
+        <canvas id="pong" width="710" height="510"></canvas>
+        
+        <script>
+            var ws;
+
+            var started = false;
+
+            var canvas = document.getElementById("pong");
+
+            var board = {
+                x: 0,
+                y: 0,
+                w: 700,
+                h: 500,
+                border: 5
+            };
+
+            var ball = {
+                x: board.w / 2,
+                y: board.h * Math.random(),
+                x_speed: 150,
+                y_speed: 150,
+                size: 7
+            };
+
+            var player1 = {
+                x: 10,
+                y: 0,
+                size: 80,
+                speed: 20,
+                score: 0
+            };
+
+            var player2 = {
+                x: board.w - player1.x,
+                y: 0,
+                size: 80,
+                speed: 20,
+                score: 0
+            };
+            
+            var player = null;
+
+            function drawPlayer(context, player) {
+                context.lineWidth = board.border;
+                context.moveTo(board.border + board.x + player.x, board.border + board.y + player.y);
+                context.lineTo(board.border + board.x + player.x, board.border + board.y + player.y + player.size);
+            };
+
+            var boardCanvas = document.createElement("canvas");
+            boardCanvas.width = canvas.width;
+            boardCanvas.height = canvas.height;
+
+            function preDrawBoard() {
+                var context = boardCanvas.getContext("2d");
+                
+                context.beginPath();
+                context.rect(board.x, board.y, board.border * 2 + board.w, board.border * 2 + board.h);
+                context.fillStyle = "green";
+                context.fill();
+                context.lineWidth = board.border;
+                context.strokeStyle = "black";
+
+                context.moveTo(board.w / 2 + board.border, board.y);
+                context.lineTo(board.w / 2 + board.border, board.y + board.h + board.border * 2);
+                context.stroke();
+            }
+            
+            preDrawBoard();
+            
+            function drawBoard(context) {
+                context.drawImage(boardCanvas, 0, 0);
+
+                context.font = "40pt Courier Bold";
+                context.fillStyle = "black";
+                context.textAlign = "center";
+                context.fillText(player1.score, board.border + (board.x + board.w / 2) - board.w / 4, board.border + board.y + 50);
+                context.fillText(player2.score, board.border + (board.x + board.w / 2) + board.w / 4, board.border + board.y + 50);
+            };
+
+            function drawBall(context) {
+                
+                if (ball.x < player1.x || ball.x > player2.x) {
+                    return;
+                }
+               
+                context.fillRect(board.border + board.x + ball.x - ball.size / 2, board.border + board.y + ball.y - ball.size / 2, ball.size, ball.size);
+            };
+
+            function sendBall() {
+                ws.send("ball:" + Math.floor(ball.x) + ":" + Math.floor(ball.y) + ":" + ball.x_speed + ":" + ball.y_speed);
+                ball.x = board.w / 2;
+                ball.y = board.h * 2;
+            }
+
+            function reverseBall() {
+                ball.x_speed *= -1.2;
+                sendBall();
+            }
+
+            function resetBall() {
+                ball.x = board.w / 2;
+                ball.y = Math.floor(board.h * Math.random());
+                ball.y_speed = 150;
+
+                if (ball.x_speed > 0) {
+                    ball.x_speed = -150;
+                } else {
+                    ball.x_speed = 150;
+                }
+                
+                ws.send("ball:" + ball.x + ":" + ball.y + ":" + ball.x_speed + ":" + ball.y_speed);
+            };
+            
+            function update() {
+                var date = new Date();
+                var time = date.getTime();
+                var time_diff = time - last_time;
+
+                last_time = time;
+
+                ball.x += ball.x_speed * time_diff / 1000;
+                ball.y += ball.y_speed * time_diff / 1000;
+
+                //
+                // Colisions
+                //
+                if (player == player1) {
+                    if (ball.x < player1.x && (ball.y > player1.y && ball.y < player1.y + player1.size)) {
+                        reverseBall();
+                    } else if (ball.x > board.w) {
+                        ws.send("score");
+                        resetBall();
+                    }
+                }
+
+                if (player == player2) {
+                    if (ball.x > player2.x && (ball.y > player2.y && ball.y < player2.y + player2.size)) {
+                        reverseBall();
+                    } else if (ball.x < 0) {
+                        ws.send("score");
+                        resetBall();
+                    }
+                }
+
+                //
+                // Wall colisions
+                //
+                if (ball.y < 0) {
+                    ball.y = 0;
+                    ball.y_speed *= -1;
+                }
+
+                if (ball.y > board.h) {
+                    ball.y = board.h;
+                    ball.y_speed *= -1;
+                }
+                
+                window.setTimeout(update, 10);
+            };
+
+            var date = new Date();
+            var last_time = date.getTime();
+
+            window.requestAnimFrame = (function(callback){
+                return  window.requestAnimationFrame ||
+                    window.webkitRequestAnimationFrame ||
+                    window.mozRequestAnimationFrame ||
+                    window.oRequestAnimationFrame ||
+                    window.msRequestAnimationFrame ||
+                function(callback){
+                    window.setTimeout(callback, 1000 / 60);
+                };
+            })();
+
+            function onkeydown_handler(e)
+            {
+                if (player == null) return;
+                
+                switch(e.keyCode)
+                {
+                    case 38:
+                        ws.send("move:-" + player.speed);
+                        break;
+                    case 40:
+                        ws.send("move:" + player.speed);
+                        break;
+                }
+            }
+            
+            window.addEventListener("keydown", onkeydown_handler, true)
+
+            function animate() {
+                
+                requestAnimFrame(function(){
+                    animate();
+                });
+                
+                var buffer = document.createElement("canvas");
+                buffer.width = canvas.width;
+                buffer.height = canvas.height;
+
+                var context = buffer.getContext("2d");
+
+                drawBoard(context);
+
+                drawPlayer(context, player1);
+                drawPlayer(context, player2);
+                context.stroke();
+                
+                if (started) {
+                    drawBall(context);
+                }
+
+                var realContext = canvas.getContext("2d");
+                realContext.drawImage(buffer, 0, 0);
+            }
+
+            window.onload = function(){
+                ws = new WebSocket("ws://172.23.96.233:8080/pong/WebSocketPong/1");
+                ws.onopen = function(event) {
+					
+                }
+                ws.onmessage = function(event) {
+                    console.log(event.data);
+                    
+                    var cmd = event.data.split(":");
+                    switch (cmd[0]) {
+                        case "start":
+                            if (player == player1) {
+                                resetBall();
+                            }
+                            started = true;
+                            update();
+                            break;
+                        case "player":
+                            if (cmd[1] == "1") { player = player1; }
+                            if (cmd[1] == "2") { player = player2; }
+                            break;
+                        case "move":
+                            var p;
+                            if (cmd[2] == "1") { p = player1; }
+                            if (cmd[2] == "2") { p = player2; }
+                            p.y += new Number(cmd[1]);
+                            
+                            if (p.y < 0) {
+                                p.y = 0;
+                            }
+
+                            if (p.y > board.h - p.size) {
+                                p.y = board.h - p.size;
+                            }
+                            break;
+                        case "ball":
+                            ball.x = new Number(cmd[1]);
+                            ball.y = new Number(cmd[2]);
+                            ball.x_speed = new Number(cmd[3]);
+                            ball.y_speed = new Number(cmd[4]);
+                            break;
+                        case "score":
+                            var p;
+                            if (cmd[1] == "1") { p = player1; }
+                            if (cmd[1] == "2") { p = player2; }
+                            p.score++;
+                    }
+                }
+                ws.onclose = function(event) {
+					
+                }
+                                
+                animate();
+            };
+
+        </script>
+    </body>
+</html>
