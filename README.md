@@ -36,3 +36,7 @@ Click in Run.
 Access with a WebSocket enabled browser: http://localhost:8080/pong/
 
 The match will automatically start when a second browser hit the same page.
+
+To access in multiple machines, edit index.html to provide a public name/address to the websocket server.
+
+Have fun!!!
